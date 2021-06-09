@@ -1,0 +1,156 @@
+---
+title: "Lab3. Correlation and Simple Linear Regression"
+author: "Robert van Timmeren (S4535553)"
+date: "Generation date: `r format(Sys.time(), '%b %d, %Y - %H:%M:%S')`"
+output: 
+  html_document:
+    toc: true
+    code_folding: show
+    toc_float: 
+        collapsed: false
+        smooth_scroll: true
+    number_sections: true
+---
+
+```{r setup, message=F, echo=F}
+packages <- c("car", "energy", "ggplot2")
+if (length(setdiff(packages, rownames(installed.packages()))) > 0) {
+  install.packages(setdiff(packages, rownames(installed.packages())), repos='http://cran.us.r-project.org') 
+}
+```
+
+# Load Data
+Create the 2 vectors for our numerical variables: translation quality and overlap.
+
+```{r load}
+tquality = c(0.3735,
+             0.3322,
+             0.2196,
+             0.2559,
+             0.2485,
+             0.3422,
+             0.1611,
+             0.3248,
+             0.2978,
+             0.3558,
+             0.3255,
+             0.2537)
+overlap = c(0.3680,
+            0.3926,
+            0.3702,
+            0.3708,
+            0.4037,
+            0.3771,
+            0.2163,
+            0.3346,
+            0.3432,
+            0.4331,
+            0.4481,
+            0.3683)
+```
+
+
+# Scatter Plot
+
+```{r, fig.width=5, fig.height=5}
+plot(overlap ~ tquality, col = 'black', pch = 19, main = "Scatterplot overlap/translation quality")
+abline(lm(overlap ~ tquality))
+```
+
+
+# Scatter Plot Interpretation
+
+It seems that as overlap value goes up, so does the translation quality. So there does seem to be a positive correlation between the two. However you can tell there is an outlier, this does seem to impact the correlation line.
+
+# Pearson
+
+```{r, fig.width=5, fig.height=5}
+cor.test(overlap, tquality, method = 'pearson')
+```
+
+
+The Pearson correlation between overlap and translation quality is positive with r = 0.6179859, df = 10 and p-value (two-tailed) <= 0.05. As such, there is a positive correlation between the two variables and the result is significant.
+
+# Assumptions Parametric Correlation
+
+Required assumptions:
+
+- Sample is randomly selected from the population it represents. Seems to be the case.
+
+- Both variables are at least interval-scaled. Check.
+
+- Both variables come from a bivariate normal distribution and/or sample size is >= 30. P-value of 0.2633 > 0.05. Check.
+
+- Residual (error) variance is homoscedastic. P-value of 0.2756 > 0.05. Check.
+
+- Residuals are independent/ autocorrelation of residuals. P-value of 0.058 > 0.05 and D-W of 0.9765615 (close to 2 means smaller chance of positive or negative autocorrelation). Check.
+
+```{r, fig.width=5, fig.height=5}
+# Bivariate normal distribution check
+library(energy)
+mvnorm.etest(cbind(overlap, tquality), 999)
+
+# Residual error variance check
+plot(lm(overlap ~ tquality), which = 1)
+
+# Formal residual error variance test
+library(car)
+ncvTest(lm(overlap ~ tquality))
+
+# Autocorrelation test
+durbinWatsonTest(lm(overlap ~ tquality))
+
+# Normality of residuals
+plot(lm(overlap ~ tquality), which = 2)
+```
+
+
+# Non-parametric Test
+
+All of the required assumptions passed, therefore a non-parametric alternative is not required. The outcome of question 4 is valid.
+
+# Check Outliers
+
+```{r, fig.width=5, fig.height=5}
+influencePlot(lm(formula = overlap ~ tquality), id.method = "identify")
+```
+
+It seems that data point 7 is an obvious outlier, because it has a high Hat-value (especially in comparison to the others), has a low studentized residual (you should check observations >2 or <-2), and lastly the Cook's distance is also high (the bubble is large).
+
+
+# Linear Regression
+
+```{r, fig.width=5, fig.height=5}
+# Create dataset without outlier
+tquality1 <- tquality[tquality > 0.2]
+overlap1 <- overlap[overlap > 0.22]
+
+# Conducting linear regression
+m <- lm(tquality1 ~ overlap1)
+summary(m)
+confint(m)
+```
+
+The linear regression model has an intercept of 0.1912, a slope of 0.2913 and the confidence intervals are -0.7915386 and 1.374214. The confidence intervals are therefore significant, because it contains the null value.
+
+
+# Interpret Linear Regression Model
+
+```{r, fig.width=5, fig.height=5}
+# Overlap value of 0
+0.1912 + 0.2913 * 0
+
+# Overlap value of 0.2
+0.1912 + 0.2913 * 0.2
+```
+
+At the overlap point of 0, the estimated translation quality would be 0.1912. At the overlap point of 0.2, it is estimated to be 0.24946. Predictions do not have to make sense, because it is a linear line, but they seem to in this case. 
+
+
+# Plot with Confidence Region
+
+```{r, fig.width=5, fig.height=5}
+library(ggplot2)
+temp <- data.frame(overlap1 = overlap1, tquality1 = tquality1)
+ggplot(temp, aes(x = overlap1, y = tquality1)) + geom_point(shape = 1, size = 3) + stat_smooth(method = lm)
+```

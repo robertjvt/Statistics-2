@@ -1,0 +1,138 @@
+---
+title: "lab week5: logistic regression"
+author: "Robert van Timmeren s4535553"
+date: "Generation date: `r format(Sys.time(), '%b %d, %Y - %H:%M:%S')`"
+output: 
+  html_document:
+    toc: true
+    code_folding: show
+    toc_float: 
+        collapsed: false
+        smooth_scroll: true
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+packages <- c("rms", "mlogit")
+if (length(setdiff(packages, rownames(installed.packages()))) > 0) {
+  install.packages(setdiff(packages, rownames(installed.packages())), repos='http://cran.us.r-project.org') 
+}
+
+library(rms) #needed for lrm()
+library(mlogit) # needed for mlogit.data() and mlogit()
+```
+
+
+# Load data
+
+We create a data frame from the table shown in this week's slides (slide 7, do not include column "both").
+
+To avoid typing all the observations (there are 184!) we use the function "c()" to concatenate information and function "rep()" to repeat one element multiple times.
+
+```{r, fig.width=5, fig.height=5}
+# create the variables
+status <- c(rep("upper", 36), rep("middle", 94), rep("lower", 54)) # exploratory variable / predictor
+outcome <- c(rep("r", 30), rep("schwa", 6), rep("r", 20), rep("schwa", 74), 
+             rep("r", 4), rep("schwa", 50)) # dependent variable / response
+
+# create the data frame
+ny.data <- data.frame(status, outcome)
+table(ny.data) # this should show the same table as the one in slide 7
+```
+
+
+# Factor variables and reference levels
+
+```{r, fig.width=5, fig.height=5}
+ny.data$status <- factor(ny.data$status)
+ny.data$outcome <- factor(ny.data$outcome)
+str(ny.data)
+
+ny.data$outcome <- relevel(ny.data$outcome, ref="schwa")
+ny.data$status <- relevel(ny.data$status, ref="upper")
+table(ny.data)
+```
+
+
+# Fit a binomial model
+
+```{r, fig.width=5, fig.height=5}
+glm_model <- glm(outcome ~ status, family = binomial, data = ny.data)
+summary(glm_model)
+```
+
+
+# Assumptions
+
+**Linearity:**
+
+Predictor variable is not quantitative, so we do not check linearity. Therefore passes.
+
+**Multicollinearity**:
+```{r, fig.width=5, fig.height=5}
+rms::vif(glm_model)
+```
+
+No values > 5, so passes multicollinearity assumption.
+
+
+# Odds of "r" to "schwa" when the predictor status equals level "middle"
+
+```{r, fig.width=5, fig.height=5}
+glm_model$coefficients
+exp(-1.3083) # intercept + status middle
+```
+
+
+# Probability of the outcome being "r" in this case, i.e. status "middle"?
+
+```{r, fig.width=5, fig.height=5}
+plogis(-1.3083)
+```
+
+
+# Load multinomial data
+
+```{r, fig.width=5, fig.height=5}
+status <- c(rep("upper", 68), rep("middle", 125), rep("lower", 71))
+
+outcome <- c(rep("r", 30), rep("schwa", 6), rep("both", 32), rep("r", 20), rep("schwa", 74), 
+             rep("both", 31), rep("r", 4), rep("schwa", 50), rep("both", 17)) # dependent
+
+ny.data2 <- data.frame(status, outcome)
+table(ny.data2)
+
+ny.data2$status <- factor(ny.data2$status)
+ny.data2$outcome <- factor(ny.data2$outcome)
+str(ny.data2)
+```
+
+
+# Reference levels (multinomial)
+
+```{r, fig.width=5, fig.height=5}
+ny.data2$outcome <- relevel(ny.data2$outcome, ref="schwa")
+ny.data2$status <- relevel(ny.data2$status, ref="upper")
+levels(ny.data2$outcome)
+levels(ny.data2$status)
+```
+
+
+# Fit a multinomial model
+
+```{r, fig.width=5, fig.height=5}
+library(mlogit)
+multi.df <- mlogit.data(ny.data2, shape="wide", choice="outcome")
+multi_model <- mlogit(outcome ~ 1 | status, data=multi.df, reflevel="schwa")
+summary(multi_model)
+```
+
+
+# Odds of "both" to "schwa" when the status equals "upper"
+
+```{r, fig.width=5, fig.height=5}
+summary(multi_model)$coefficients
+exp(1.673971)
+```

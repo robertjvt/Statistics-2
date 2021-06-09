@@ -1,0 +1,151 @@
+---
+title: "Statistics2, lab week 2: repeated measures ANOVA"
+author: "Robert van Timmeren s4535553"
+date: "April 16th, 2021"
+output:
+  html_document:
+    code_folding: show
+    number_sections: yes
+    toc: yes
+    toc_float:
+      collapsed: no
+      smooth_scroll: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load data and libraries
+
+The data is given in a format similar to that of file dialect_change_1.csv in the lecture and we need it in a format similar to dialect_change2.csv.
+
+We load the data and create two factor variables, one for the groups and another one for the subjects.
+
+```{r 1load}
+library(car)
+library(ez)
+
+RT <- c(461,245,846,976,567,318,567,689,432,658,478,571,578,769,389,518,
+        789,368,901,948,890,431,489,543,937,698,498,389,486,777,446,324,
+        478,336,753,653,639,302,371,782,480,352,447,434,307,543,787,349,
+        646,564,827,824,987,357,598,334,789,599,955,578,778,659,680,448)
+mygroups = c("SR_ANP","OR_ANP","SR_INP","OR_INP")
+
+# create a sequence of numbers from 1 to 16. Hint: use function seq()
+mysubjects = seq(1, 16)
+
+# each group is repeated 16 times
+# vector subjects has less elements (16) than RT (64), therefore it will be repeated 4 times
+mydata <- data.frame(RT, rep(mygroups, each=16), mysubjects)
+
+colnames(mydata) <- c("RT", "Group", "Subj") # rename to more meaningful names
+
+# we need Subj to be a factor for the analyses below, and it wasn't by default. You can check with str(mydata). Make it a factor using function as.factor()
+mydata$Subj <- as.factor(mydata$Subj)
+
+# Groups also needs to be a factor
+mydata$Group <- as.factor(mydata$Group)
+
+# Check if data is now correct
+str(mydata)
+```
+
+
+# Boxplots
+
+```{r, fig.width=5, fig.height=5}
+# Boxplots of four sentence types.
+boxplot(mydata$RT ~ mydata$Group, xlab = "Group", ylab = "RT", main = "Boxplots sentence types")
+```
+
+
+I would expect that there are some significant differences between some groups, seeing as the centers are quite different and the boxes also don't seem to overlap very well. 
+
+
+# Hypotheses
+
+$H_0$: μ~SR_ANP~ = μ~OR_ANP~ = μ~SR_INP~ = μ~OR_INP~
+
+$H_0$: not all of the μ~i~ are equal
+
+
+# Normality
+
+```{r, fig.width=10, fig.height=5}
+par(mfrow=c(1,2))
+# Creating q-q plots for all four groups
+# SR_ANP
+qqnorm(mydata[mydata$Group == 'SR_ANP', ]$RT)
+qqline(mydata[mydata$Group == 'SR_ANP', ]$RT)
+
+# OR_ANP
+qqnorm(mydata[mydata$Group == 'OR_ANP', ]$RT)
+qqline(mydata[mydata$Group == 'OR_ANP', ]$RT)
+
+# SR_INP
+qqnorm(mydata[mydata$Group == 'SR_INP', ]$RT)
+qqline(mydata[mydata$Group == 'SR_INP', ]$RT)
+
+# OR_INP
+qqnorm(mydata[mydata$Group == 'OR_INP', ]$RT)
+qqline(mydata[mydata$Group == 'OR_INP', ]$RT)
+
+# Conducting Shapiro-Wilk test on all groups
+aggregate(RT ~ Group, data = mydata, function(x) shapiro.test(x)$p.value)
+```
+
+It seems that the p-value of group OR_ANP (0.04878843) is < 0.05. This means that we have reason to believe that the data for this group may not be normally distributed. The values of the others groups are all >= 0.05, meaning they are probably normally distributed.
+
+
+# Variance
+
+```{r, fig.width=5, fig.height=5}
+leveneTest(RT ~ Group, data = mydata)
+```
+
+It seems that the four groups do have equal variance, since the p-value (0.6366) is >= 0.05. 
+
+
+# 1-way ANOVA
+
+```{r, fig.width=5, fig.height=5}
+mydata.aov <- aov(RT ~ Group, data = mydata)
+summary(mydata.aov)
+```
+
+P-value is 0.112, which is >= 0.05. Since the p-value is >= than the α-level, the result is not significant. Therefore we should accept the null hypothesis. We can conclude that no pair of groups have different means.
+
+
+# Repeated Measures ANOVA
+
+```{r, fig.width=5, fig.height=5}
+library(ez)
+mydata.aov <- ezANOVA(data = mydata, dv = RT, wid = Subj, within = Group,
+                      detailed = TRUE, type = 3)
+mydata.aov$ANOVA
+```
+
+
+# Difference between the two ANOVAs tests
+
+The F-value is higher for the repeated measures ANOVA test in comparison to the 1-way ANOVA test. This is because we are now conducting a paired experiment (repeated measures) which makes the residuals smaller and thus the F-value higher. This then gives a higher chance for a significant result.
+
+P-value is 8.272671e-11, which is < 0.05. Since this p-value is so low, and below the α-level, the result is significant. We therefore should reject the null hypothesis with the alternative ANOVA test. We can conclude now that there are differences between the means of some of the groups. The reason this happens for the repeated measures ANOVA test, but not the other, is because 
+
+
+# Sphericity
+
+```{r, fig.width=5, fig.height=5}
+mydata.aov$`Mauchly's Test for Sphericity`
+```
+
+P-value is >= 0.05, meaning that null hypothesis is accepted for this test. This means that the assumption for sphericity is met, so we can assume homogeneity of variances of pairwise differences between levels of sentence types.
+
+
+# Effect size
+```{r, fig.width=5, fig.height=5}
+mydata.aov$ANOVA$ges[2]
+```
+
+The effect size is 0.09423971. 

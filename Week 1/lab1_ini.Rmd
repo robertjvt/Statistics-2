@@ -1,0 +1,147 @@
+---
+title: "Statistics2, lab 1: 1-way ANOVA"
+author: "Robert van Timmeren S4535553"
+date: "March 29th, 2021"
+output:
+  html_document:
+    code_folding: show
+    number_sections: yes
+    toc: yes
+    toc_float:
+      collapsed: no
+      smooth_scroll: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 1. Load libraries and data
+
+```{r 1load}
+# 1. Load the input file
+library(car)
+df = read.csv("lab1_translation_empathy.csv")
+head(df)
+```
+
+
+# 2. Investigate the dependent variable
+
+I would expect that the groups all scored about the same, since I think that translation does not necessarily have impact on the empathy of a reader with the characters of that story. I could see the MT group score a little lower, since some context may be lost during the translation. 
+
+```{r, fig.width=5, fig.height=5}
+# Boxplot of three groups
+boxplot(df$empathy ~ df$condition, main = "Boxplot empathy scores", xlab = "Condition", ylab = "Empathy")
+
+# Check mean of each group and overall
+tapply(df$empathy, df$condition, mean)
+mean(df$empathy)
+```
+
+Apparently I was incorrect, and the HT group did also score higher in empathy. The only two groups their mean are fairly even. 
+
+# 3. Hypotheses
+
+$H_0$: μ~HT~ = μ~MT~ = μ~MTPE~
+
+$H_0$: not all of the μ~i~ are equal
+
+
+# Test normality
+
+```{r, fig.width=5, fig.height=5}
+df.aov <- aov(empathy ~ condition, data = df)
+df.aov.res <- residuals(object=df.aov)
+
+# Creating a q-q plot
+qqnorm(y=df.aov.res)
+qqline(y=df.aov.res)
+
+# Conducting Shapiro-Wilk test
+aggregate(empathy ~ condition, data=df, function(x) shapiro.test(x)$p.value)
+```
+
+The data is assumed to be normally distributed, since all p-values of Shapiro-Wilk test are >= 0.05 (so in the Shapiro-Wilk test, the null hypothesis is accepted). The q-q plot also shows that the data seems to be normally distributed. The assumption of normality is fulfilled, because the data is normally distributed.
+
+
+# Test variance
+
+```{r, fig.width=5, fig.height=5}
+# Conduct Levene test (since data is normal)
+leveneTest(df.aov)
+
+```
+
+The variance of the data is homogeneous, since p is 0.1824, which is >= 0.05. So the null hypothesis of the Levene test that all variances in the different groups are equal is accepted. The assumption of variance is fulfilled, because the variance is homogeneous.
+
+
+# Test variance with Hartley's test, by hand
+
+```{r, fig.width=5, fig.height=5}
+# a. Variance per group
+# MT
+var_mt <- (2.6-2.925)^2 + (3.2-2.925)^2 + (4.4-2.925)^2 + (3.6-2.925)^2 + (4-2.925)^2 + (2.6-2.925)^2 + (1.4-2.925)^2 + (1.6-2.925)^2
+
+# HT
+var_ht <- (4-3.92)^2 + (3-3.92)^2 + (3.6-3.92)^2 + (4.4-3.92)^2 + (4.2-3.92)^2 + (3-3.92)^2 + (5-3.92)^2 + (3.8-3.92)^2 + (4.4-3.92)^2 + (3.8-3.92)^2
+
+# MTPE
+var_mtpe <- (2.4-2.6)^2 + (3.6-2.6)^2 + (1.4-2.6)^2 + (2-2.6)^2 + (2.6-2.6)^2 + (1.8-2.6)^2 + (3-2.6)^2 + (2.8-2.6)^2 + (1.8-2.6)^2 + (3.4-2.6)^2 + (3.8-2.6)^2
+
+var_mt / var_ht
+```
+
+2.3 < 6.94 (from a-level 0.05 table with n-1 = 7 and k = 3), so the variance is homogeneous. Meaning that this test does give the same result as the previous test.
+
+
+# 1-way ANOVA
+
+```{r, fig.width=5, fig.height=5}
+df.aov <- aov(empathy ~ condition, data = df)
+summary(df.aov)
+```
+
+P-value of 1-way ANOVA is 0.00384, which is < than 0.05. Since the p-value is lower than the α-level, the result is significant. Therefore we should reject the null hypothesis and accept the alternative hypothesis.
+
+
+# Effect size
+
+```{r, fig.width=5, fig.height=5}
+
+# R2 (SSG / SST)
+SSG <- 10*(3.92-3.144828)^2 + 8*(2.925-3.144828)^2 + 11*(2.6-3.144828)^2
+
+
+# SST = SSG + SSE
+SSE <- var_mt + var_ht + var_mtpe
+SST <- SSG + SSE
+SST
+
+# Effect size
+SSG / SST
+
+# Adjusted R2
+summary(lm(formula = empathy ~ condition, data = df))
+
+```
+
+R2 is 0.3481126 and adjusted R2 is 0.298.
+
+
+# Post-hoc test Bonferroni
+
+```{r, fig.width=5, fig.height=5}
+pairwise.t.test(x = df$empathy, g = df$condition, p.adjust.method = "bonferroni")
+```
+
+MTPE and HT are significantly different, since 0.0037 < 0.05. However, MT and HT and MTPE and HT are not significantly different, since 0.0553 and 1 >= 0.05.
+
+
+# Post-hoc test TukeyHSD
+
+```{r, fig.width=5, fig.height=5}
+TukeyHSD(df.aov)
+```
+
+The function returns the differences between the group means. The greatest difference can be seen between MTPE and HT (-1.320), so that seems to correspond to the previous test. However, the p-value of MT and HT is < 0.05, meaning that MT and HT are significantly different. The outcome does not seem to agree on those two group.

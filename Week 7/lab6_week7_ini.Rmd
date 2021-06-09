@@ -1,0 +1,151 @@
+---
+title: "lab 6 (week 7) lab"
+author: "Robert van Timmeren s4535553"
+date: "Generation date: `r format(Sys.time(), '%b %d, %Y - %H:%M:%S')`"
+output: 
+  html_document:
+    toc: true
+    code_folding: show
+    toc_float: 
+        collapsed: false
+        smooth_scroll: true
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+packages <- c("ggplot2", "interactions", "lme4", "visreg")
+if (length(setdiff(packages, rownames(installed.packages()))) > 0) {
+  install.packages(setdiff(packages, rownames(installed.packages())), repos='http://cran.us.r-project.org') 
+}
+
+library(visreg) # another package for interaction plots
+#library(jtools) # previous package for function interact_plot()
+library(interactions)
+library(ggplot2)
+library(lme4)
+```
+
+
+# Load data
+
+```{r, fig.width=5, fig.height=5}
+mydata = read.csv("C:/Users/Robert/Google Drive/School/1. Statistiek 2/Week 7/lab6_temperature.csv", stringsAsFactors = TRUE)
+head(mydata)
+```
+
+
+# Make Coastal a factor
+
+```{r, fig.width=5, fig.height=5}
+mydata$Coastal <- factor(mydata$Coastal)
+mydata$Coastal <- relevel(mydata$Coastal, ref="0")
+str(mydata)
+```
+
+
+# Make Year a Factor
+
+```{r, fig.width=5, fig.height=5}
+mydata$Year <- factor(mydata$Year)
+str(mydata)
+
+# Treating year as a factor will allow you to calculate the effect of each year. 
+```
+
+
+# Centre quantitative predictors
+
+```{r, fig.width=5, fig.height=5}
+# Quantitative predictors are: lat, long, elevation
+mydata2 = mydata
+mydata2$Latitude <- mydata2$Latitude - mean(mydata2$Latitude)
+mydata2$Longitude <- mydata2$Longitude - mean(mydata2$Longitude)
+mydata2$Elevation <- (mydata2$Elevation - mean(mydata2$Elevation)) / 1000
+```
+
+
+# Boxplots
+
+```{r, fig.width=10, fig.height=5}
+boxplot(mydata2$Temperature ~ mydata2$City)
+boxplot(mydata2$Temperature ~ mydata2$Year)
+
+# The temperatures are very constant over the years, however they are not over city's. This makes sense, seeing as some city's are naturally in places with higher temperatures, such as Florida.
+```
+
+
+# LMER
+
+```{r, fig.width=10, fig.height=5}
+mixed.lmer = lmer(Temperature ~ (1|City) + (1|Year), mydata2, REML=FALSE)
+summary(mixed.lmer)$coefficients
+
+mixed.lmer0 = lmer(Temperature ~ Elevation + (1|City) + (1|Year), mydata2)
+mixed.lmer1 = lmer(Temperature ~ Elevation + Coastal + (1|City) + (1|Year), mydata2)
+AIC(mixed.lmer0) - AIC(mixed.lmer1) # 13.6 > 2 - more complex is better
+mixed.lmer2 = lmer(Temperature ~ Elevation + Coastal + Latitude + (1|City) + (1|Year), mydata2)
+AIC(mixed.lmer1) - AIC(mixed.lmer2) # 68.5 > 2 - more complex is better
+mixed.lmer3 = lmer(Temperature ~ Elevation + Coastal + Latitude + Longitude + (1|City) + (1|Year), mydata2)
+AIC(mixed.lmer2) - AIC(mixed.lmer3) # 23.2 > 2 - more complex is better
+
+summary(mixed.lmer3)$coefficients
+# All the predictors are significant, because for all |t| > 2.
+# The coefficients are the temperature. So a unit of measure for latitude (for instance) reduces temperature with -1.896
+```
+
+
+# Add interactions
+
+```{r, fig.width=10, fig.height=5}
+mixed.lmer.int0 = lmer(Temperature ~ Coastal*Elevation + Coastal*Latitude + Coastal*Longitude + Elevation*Latitude + Elevation*Longitude + (1|City) + (1|Year), mydata2)
+summary(mixed.lmer.int0)$coefficients
+# Not all interactions are significant, Coastal*Latitude is not.
+mixed.lmer.int1 = lmer(Temperature ~ Coastal*Elevation + Coastal*Longitude + Elevation*Latitude + Elevation*Longitude + (1|City) + (1|Year), mydata2)
+
+AIC(mixed.lmer3) - AIC(mixed.lmer.int0) # Model with all interactions is not better than without, because |t| < 2.
+```
+
+
+# Visualise interactions
+
+```{r, fig.width=10, fig.height=5}
+library(interactions)
+# Coastal * Latitude
+interact_plot(mixed.lmer.int1, pred=Latitude, modx=Coastal)
+# This shows us that with the interaction of Coastal and Latitude that temperatures decreases for both, but is a little higher when it is coastal, but decreases faster than when it is not coastal as latitude goes up.
+
+# Coastal * Elevation
+interact_plot(mixed.lmer.int1, pred=Elevation, modx=Coastal)
+# This shows us that the temperature is higher when it is coastal, but decreases to about the same temperature as non coastal when elevation goes up to around 5.
+```
+
+
+# Assumptions
+
+```{r, fig.width=10, fig.height=5}
+library(car)
+qqp(resid(mixed.lmer.int1))
+shapiro.test(residuals(mixed.lmer.int1)) 
+# P-value < 0.05 and therefore rejects null hypothesis, which means that residuals are not normally distributed.
+
+
+plot(fitted(mixed.lmer.int1), resid(mixed.lmer.int1))
+# Assumption of homoscedasticity is OK, because the points are spread around horizontal 0 line.\
+```
+
+
+# Outliers
+
+```{r, fig.width=10, fig.height=5}
+mydfno = mydata2[abs(scale(resid(mixed.lmer.int1))) < 2, ]
+dim(mydfno) - dim(mydata2)
+1 - (dim(mydfno)/dim(mydata2))
+# 4 outliers were removed, which equals 0.2%.
+
+mixed.lmer.int9 = lmer(Temperature ~ Coastal*Elevation + Coastal*Longitude + Elevation*Latitude + Elevation*Longitude + (1|City) + (1|Year), mydfno)
+summary(mixed.lmer.int9)$coefficients
+summary(mixed.lmer.int1)$coefficients
+# There does not seem to be that big of a difference. The coefficients remain fairly the same and no t-value becomes significant or not significant.
+```

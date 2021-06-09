@@ -1,0 +1,176 @@
+---
+title: "lab 4 (week 5)"
+author: "Robert van Timmeren (S4535553)"
+date: "Generation date: `r format(Sys.time(), '%b %d, %Y - %H:%M:%S')`"
+output: 
+  html_document:
+    toc: true
+    code_folding: show
+    toc_float: 
+        collapsed: false
+        smooth_scroll: true
+    number_sections: true
+---
+
+
+```{r setup, message=F, echo=F}
+knitr::opts_chunk$set(echo = TRUE)
+
+packages <- c("car", "interactions", "rms")
+if (length(setdiff(packages, rownames(installed.packages()))) > 0) {
+  install.packages(setdiff(packages, rownames(installed.packages())), repos='http://cran.us.r-project.org') 
+}
+
+library(car)
+library(interactions)
+library(rms)
+```
+
+
+# Load the dataset
+
+```{r load}
+df = read.csv("lab4_cheese.csv")
+head(df)
+```
+
+
+# Scatter plots and correlation coefficients
+
+```{r, fig.width=5, fig.height=5}
+# Acetic and H2S
+plot(df$acetic ~ df$h2s, main = "Scatterplot Acetic and H2S")
+abline(lm(df$acetic ~ df$h2s))
+cor(df$acetic, df$h2s)
+
+# Acetic and Lactic
+plot(df$acetic ~ df$lactic, main = "Scatterplot Acetic and Lactic")
+abline(lm(df$acetic ~ df$lactic))
+cor(df$acetic, df$lactic)
+
+# H2S and lactic
+plot(df$h2s ~ df$lactic, main = "Scatterplot H2S and Lactic")
+abline(lm(df$h2s ~ df$lactic))
+cor(df$h2s, df$lactic)
+```
+
+# Multiple linear regression
+
+```{r, fig.width=5, fig.height=5}
+confint(lm(df$taste ~ df$acetic + df$h2s + df$lactic))
+summary(lm(df$taste ~ df$acetic + df$h2s + df$lactic))$coefficients
+```
+
+Only H2S and lactic are significant. 
+
+Acetic: p-value of 0.942 > 0.05 and therefore not significant. 
+When acetic increases by 1, taste increases by 0.328.
+
+H2S: p-value of 0.004 <= 0.05 and therefore significant.
+When H2S increases by 1, taste increases by 3.912.
+
+Lactic: p-value of 0.031 <= 0.05 and therefore significant.
+When lactic increases by 1, taste increases by 19.671.
+
+
+# Interactions
+
+```{r, fig.width=5, fig.height=5}
+# Acetic and H2S
+m.int <- lm(taste ~ h2s * acetic + lactic, data=df)
+summary(m.int)$coefficients
+
+# H2S and lactic
+m.int <- lm(taste ~ h2s * lactic + acetic, data=df)
+summary(m.int)$coefficients
+
+# Acetic and lactic
+m.int <- lm(taste ~ acetic * lactic + h2s, data=df)
+summary(m.int)$coefficients
+
+# Lowest p-value is of acetic and lactic with p-value of 0.294.
+library(jtools)
+interact_plot(m.int, pred='lactic', modx='acetic')
+
+```
+
+
+# Assumption: linear relationship
+
+```{r, fig.width=5, fig.height=5}
+
+#par(mfrow = c(1, 3))
+library(car)
+m <- lm(taste ~ acetic + lactic + h2s, data = df)
+crPlot(m, var = 'acetic')
+crPlot(m, var = 'lactic')
+crPlot(m, var = 'h2s')
+
+# All of the variables seem fairly linear.
+```
+
+
+# Assumption: errors vary constantly (homoscedasticity)
+
+```{r, fig.width=5, fig.height=5}
+ncvTest(m)
+
+# P-value > 0.05, so accept null hypothesis that the error has constant variance with the response.
+```
+
+
+# Assumption: multicollinearity and autocorrelation of residuals
+
+```{r, fig.width=5, fig.height=5}
+car::vif(m)
+
+# No scores exceeds 5.
+
+durbinWatsonTest(m)
+acf(resid(m))
+
+# P-value > 0.05, so accept null hypothesis that the value of the variable depends on the previous or next.
+```
+
+
+# Assumption: residuals normally distributed
+
+```{r, fig.width=5, fig.height=5}
+plot(m, which = 2)
+
+# The residuals seem to be fairly normally distributed in the plot.
+
+shapiro.test(residuals(m))$p.value
+
+# P-value > 0.05, which means we accept the null hypothesis which states that it is normally distributed.
+
+
+```
+
+
+# Variable selection
+
+```{r, fig.width=5, fig.height=5}
+m0 <- lm(taste ~ 1, data = df)
+m.fw <- step(m0, direction = 'forward', scope = ~ df$acetic + df$h2s + df$lactic)
+
+# No, not all variables are retained. The best model consists of h2s and lactic.
+
+m2 <- lm(df$taste ~ df$acetic + df$h2s + df$lactic)
+m.bw <- step(m2, direction = 'backward', scope = ~df$acetic + df$h2s + df$lactic)
+
+# Also conducting backward to see how this works (also possesses less risk). The outcome is the same, where the model consists of h2s and lactic.
+
+# The model does fulfill the assumptions checked before, because all the variables in the model passed the assumptions.
+```
+
+
+# Overfitting
+
+```{r, fig.width=5, fig.height=5}
+m.val <- ols (taste ~ h2s + lactic, x = TRUE, y = TRUE, data = df)
+val <- validate(m.val, bw=TRUE, B=1000, pr=FALSE)
+val[1:5,]
+
+# Model does not seem to be overfitted. There are no large optimism values (which indicate overfitting) and the slope optimism is far below 0.05. 
+```
